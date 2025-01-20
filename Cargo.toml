@@ -26,7 +26,6 @@ futures = "0.3"
 async-trait = "0.1"
 chrono = "0.4"
 google-cloud-pubsub = "0.30"
-googapis = "0.6"
 gouth = "0.2"
 clap = { version = "4.5", features = ["derive"] }
 

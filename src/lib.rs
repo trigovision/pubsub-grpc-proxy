@@ -13,6 +13,8 @@ use tonic::service::interceptor::InterceptedService;
 use tonic::transport::Channel;
 use tonic::{Request, Response, Status, Streaming};
 
+pub const CERTIFICATES: &[u8] = include_bytes!("../google-roots.pem");
+
 #[derive(Clone)]
 pub struct PubSubProxy<T: interceptors::ProxyInterceptor + Clone> {
     publisher_client:
@@ -29,9 +31,7 @@ impl<T: interceptors::ProxyInterceptor + Clone> PubSubProxy<T> {
     ) -> Result<Self, Box<dyn std::error::Error>> {
         println!("Creating TLS config...");
         let tls_config = tonic::transport::ClientTlsConfig::new()
-            .ca_certificate(tonic::transport::Certificate::from_pem(
-                googapis::CERTIFICATES,
-            ))
+            .ca_certificate(tonic::transport::Certificate::from_pem(CERTIFICATES))
             .domain_name("pubsub.googleapis.com");
 
         println!("Establishing channel connection to pubsub.googleapis.com...");
