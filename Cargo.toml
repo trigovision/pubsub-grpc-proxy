@@ -19,6 +19,7 @@ precompile-protos = []
 tracing = "0.1"
 tracing-subscriber = "0.3"
 tonic = { version = "0.12", features = ["tls", "gzip"] }
+tonic-health = "0.12"
 prost = "0.13"
 prost-types = "0.13"
 tokio = { version = "1", features = ["full"] }

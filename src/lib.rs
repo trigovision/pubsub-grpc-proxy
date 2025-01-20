@@ -405,11 +405,23 @@ pub async fn run_server<T: interceptors::ProxyInterceptor + Clone>(
     let addr = bind_addr.parse()?;
     let (publisher, subscriber) = proxy.into_service();
 
+    let (mut health_reporter, health_service) = tonic_health::server::health_reporter();
+    health_reporter
+        .set_serving::<PublisherServer<PubSubProxy<T>>>()
+        .await;
+
+    health_reporter
+        .set_serving::<SubscriberServer<PubSubProxy<T>>>()
+        .await;
+
     println!("PubSub proxy server listening on {}", addr);
 
     let res = tonic::transport::Server::builder()
+        // Enable HTTP/1.1 support for local health check using curl
+        .accept_http1(true)
         .add_service(publisher)
         .add_service(subscriber)
+        .add_service(health_service)
         .serve(addr)
         .await;
 
