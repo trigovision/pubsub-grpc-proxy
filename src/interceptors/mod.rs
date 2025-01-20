@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::pubsub::*;
+use crate::proto::pubsub::*;
 
 pub mod namespace;
 

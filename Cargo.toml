@@ -4,6 +4,17 @@ version = "0.1.0"
 edition = "2021"
 description = "A gRPC proxy for Google Cloud Pub/Sub with request manipulation capabilities"
 
+[features]
+# Use precompiled protos by default
+# disabling this feature will compile the protos in build.rs
+default = ["use-precompiled-protos"]
+
+# Use the precompiled `google.pubsub.v1.rs` file produced by `build.rs`
+use-precompiled-protos = []
+
+# Precompile the `google.pubsub.v1.rs` file to `src/proto`
+precompile-protos = []
+
 [dependencies]
 tracing = "0.1"
 tracing-subscriber = "0.3"
@@ -28,4 +39,4 @@ path = "src/lib.rs"
 
 [[bin]]
 name = "pubsub-grpc-proxy"
-path = "src/main.rs" 
+path = "bin/main.rs"

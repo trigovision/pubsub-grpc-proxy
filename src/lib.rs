@@ -1,15 +1,12 @@
-pub mod pubsub {
-    tonic::include_proto!("google.pubsub.v1");
-}
-
 pub mod auth;
 pub mod interceptors;
+pub mod proto;
 
 use auth::TokenInterceptor;
 use futures::{Stream, StreamExt, TryStreamExt};
-use pubsub::publisher_server::{Publisher, PublisherServer};
-use pubsub::subscriber_server::{Subscriber, SubscriberServer};
-use pubsub::*;
+use proto::pubsub::publisher_server::{Publisher, PublisherServer};
+use proto::pubsub::subscriber_server::{Subscriber, SubscriberServer};
+use proto::pubsub::*;
 use std::pin::Pin;
 use std::time::Duration;
 use tonic::service::interceptor::InterceptedService;
