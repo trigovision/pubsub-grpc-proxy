@@ -13,6 +13,9 @@ struct Args {
     #[arg(long, required = true)]
     project_id: String,
 
+    #[arg(long, required = true)]
+    port: u16,
+
     #[arg(long, required = true, value_parser(["passthrough", "namespace"]))]
     interceptor: String,
 
@@ -48,7 +51,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     .await?;
 
     // Run the proxy server
-    pubsub_grpc_proxy::run_server(proxy, "0.0.0.0:50051").await?;
+    let addr = format!("0.0.0.0:{}", args.port);
+    pubsub_grpc_proxy::run_server(proxy, &addr).await?;
 
     Ok(())
 }
