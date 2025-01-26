@@ -9,6 +9,7 @@ use proto::pubsub::subscriber_server::{Subscriber, SubscriberServer};
 use proto::pubsub::*;
 use std::pin::Pin;
 use std::time::Duration;
+use tonic::codec::CompressionEncoding;
 use tonic::service::interceptor::InterceptedService;
 use tonic::transport::Channel;
 use tonic::{Request, Response, Status, Streaming};
@@ -419,8 +420,8 @@ pub async fn run_server<T: interceptors::ProxyInterceptor + Clone>(
     let res = tonic::transport::Server::builder()
         // Enable HTTP/1.1 support for local health check using curl
         .accept_http1(true)
-        .add_service(publisher)
-        .add_service(subscriber)
+        .add_service(publisher.accept_compressed(CompressionEncoding::Gzip))
+        .add_service(subscriber.accept_compressed(CompressionEncoding::Gzip))
         .add_service(health_service)
         .serve(addr)
         .await;
