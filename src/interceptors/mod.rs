@@ -4,11 +4,11 @@ use crate::proto::pubsub::*;
 
 pub mod namespace;
 
-#[derive(Clone, Default)]
+#[derive(Clone, Default, Debug)]
 pub struct PassthroughInterceptor;
 impl ProxyInterceptor for PassthroughInterceptor {}
 
-pub trait ProxyInterceptor: Send + Sync + 'static {
+pub trait ProxyInterceptor: std::fmt::Debug + Send + Sync + 'static {
     fn transform_create_topic(&self, request: Topic) -> Topic {
         request
     }
@@ -120,4 +120,3 @@ impl<T: ProxyInterceptor + ?Sized> ProxyInterceptor for Box<T> {
 impl<T: ProxyInterceptor + ?Sized> ProxyInterceptor for Arc<T> {
     // No need to implement any methods - they'll automatically delegate to the inner type
 }
-

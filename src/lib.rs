@@ -30,12 +30,12 @@ impl<T: interceptors::ProxyInterceptor + Clone> PubSubProxy<T> {
         auth_method: auth::AuthMethod,
         interceptor: T,
     ) -> Result<Self, Box<dyn std::error::Error>> {
-        println!("Creating TLS config...");
+        tracing::debug!("Creating TLS config...");
         let tls_config = tonic::transport::ClientTlsConfig::new()
             .ca_certificate(tonic::transport::Certificate::from_pem(CERTIFICATES))
             .domain_name("pubsub.googleapis.com");
 
-        println!("Establishing channel connection to pubsub.googleapis.com...");
+        tracing::info!("Establishing channel connection to pubsub.googleapis.com...");
         let channel = tonic::transport::Channel::from_static("https://pubsub.googleapis.com/")
             .connect_timeout(Duration::from_secs(30))
             .http2_keep_alive_interval(Duration::from_secs(30))
@@ -44,9 +44,9 @@ impl<T: interceptors::ProxyInterceptor + Clone> PubSubProxy<T> {
             .tls_config(tls_config)
             .expect("static address");
 
-        println!("Awaiting channel connection...");
+        tracing::info!("Awaiting channel connection...");
         let connected_channel = channel.connect().await?;
-        println!("Channel connected successfully");
+        tracing::info!("Channel connected successfully");
 
         let token_interceptor: TokenInterceptor = auth_method.try_into()?;
 
@@ -74,7 +74,7 @@ impl<T: interceptors::ProxyInterceptor + Clone> PubSubProxy<T> {
 #[tonic::async_trait]
 impl<T: interceptors::ProxyInterceptor + Clone> Publisher for PubSubProxy<T> {
     async fn create_topic(&self, request: Request<Topic>) -> Result<Response<Topic>, Status> {
-        println!("Proxied call to create_topic");
+        tracing::info!("Proxied call to create_topic");
         let transformed = self
             .interceptor
             .transform_create_topic(request.into_inner());
@@ -88,7 +88,7 @@ impl<T: interceptors::ProxyInterceptor + Clone> Publisher for PubSubProxy<T> {
         &self,
         request: Request<UpdateTopicRequest>,
     ) -> Result<Response<Topic>, Status> {
-        println!("Proxied call to update_topic");
+        tracing::info!("Proxied call to update_topic");
         let transformed = self
             .interceptor
             .transform_update_topic(request.into_inner());
@@ -102,7 +102,7 @@ impl<T: interceptors::ProxyInterceptor + Clone> Publisher for PubSubProxy<T> {
         &self,
         request: Request<PublishRequest>,
     ) -> Result<Response<PublishResponse>, Status> {
-        println!("Proxied call to publish");
+        tracing::info!("Proxied call to publish");
         let transformed = self.interceptor.transform_publish(request.into_inner());
         self.publisher_client.clone().publish(transformed).await
     }
@@ -111,7 +111,7 @@ impl<T: interceptors::ProxyInterceptor + Clone> Publisher for PubSubProxy<T> {
         &self,
         request: Request<GetTopicRequest>,
     ) -> Result<Response<Topic>, Status> {
-        println!("Proxied call to get_topic");
+        tracing::info!("Proxied call to get_topic");
         let transformed = self.interceptor.transform_get_topic(request.into_inner());
         self.publisher_client.clone().get_topic(transformed).await
     }
@@ -120,7 +120,7 @@ impl<T: interceptors::ProxyInterceptor + Clone> Publisher for PubSubProxy<T> {
         &self,
         request: Request<ListTopicsRequest>,
     ) -> Result<Response<ListTopicsResponse>, Status> {
-        println!("Proxied call to list_topics");
+        tracing::info!("Proxied call to list_topics");
         let transformed = self.interceptor.transform_list_topics(request.into_inner());
         self.publisher_client.clone().list_topics(transformed).await
     }
@@ -129,7 +129,7 @@ impl<T: interceptors::ProxyInterceptor + Clone> Publisher for PubSubProxy<T> {
         &self,
         request: Request<ListTopicSubscriptionsRequest>,
     ) -> Result<Response<ListTopicSubscriptionsResponse>, Status> {
-        println!("Proxied call to list_topic_subscriptions");
+        tracing::info!("Proxied call to list_topic_subscriptions");
         let transformed = self
             .interceptor
             .transform_list_topic_subscriptions(request.into_inner());
@@ -143,7 +143,7 @@ impl<T: interceptors::ProxyInterceptor + Clone> Publisher for PubSubProxy<T> {
         &self,
         request: Request<ListTopicSnapshotsRequest>,
     ) -> Result<Response<ListTopicSnapshotsResponse>, Status> {
-        println!("Proxied call to list_topic_snapshots");
+        tracing::info!("Proxied call to list_topic_snapshots");
         let transformed = self
             .interceptor
             .transform_list_topic_snapshots(request.into_inner());
@@ -157,7 +157,7 @@ impl<T: interceptors::ProxyInterceptor + Clone> Publisher for PubSubProxy<T> {
         &self,
         request: Request<DeleteTopicRequest>,
     ) -> Result<Response<()>, Status> {
-        println!("Proxied call to delete_topic");
+        tracing::info!("Proxied call to delete_topic");
         let transformed = self
             .interceptor
             .transform_delete_topic(request.into_inner());
@@ -171,7 +171,7 @@ impl<T: interceptors::ProxyInterceptor + Clone> Publisher for PubSubProxy<T> {
         &self,
         request: Request<DetachSubscriptionRequest>,
     ) -> Result<Response<DetachSubscriptionResponse>, Status> {
-        println!("Proxied call to detach_subscription");
+        tracing::info!("Proxied call to detach_subscription");
         let transformed = self
             .interceptor
             .transform_detach_subscription(request.into_inner());
@@ -188,7 +188,7 @@ impl<T: interceptors::ProxyInterceptor + Clone> Subscriber for PubSubProxy<T> {
         &self,
         request: Request<Subscription>,
     ) -> Result<Response<Subscription>, Status> {
-        println!("Proxied call to create_subscription");
+        tracing::info!("Proxied call to create_subscription");
         let transformed = self
             .interceptor
             .transform_create_subscription(request.into_inner());
@@ -202,7 +202,7 @@ impl<T: interceptors::ProxyInterceptor + Clone> Subscriber for PubSubProxy<T> {
         &self,
         request: Request<GetSubscriptionRequest>,
     ) -> Result<Response<Subscription>, Status> {
-        println!("Proxied call to get_subscription");
+        tracing::info!("Proxied call to get_subscription");
         let transformed = self
             .interceptor
             .transform_get_subscription(request.into_inner());
@@ -216,7 +216,7 @@ impl<T: interceptors::ProxyInterceptor + Clone> Subscriber for PubSubProxy<T> {
         &self,
         request: Request<UpdateSubscriptionRequest>,
     ) -> Result<Response<Subscription>, Status> {
-        println!("Proxied call to update_subscription");
+        tracing::info!("Proxied call to update_subscription");
         let transformed = self
             .interceptor
             .transform_update_subscription(request.into_inner());
@@ -230,7 +230,7 @@ impl<T: interceptors::ProxyInterceptor + Clone> Subscriber for PubSubProxy<T> {
         &self,
         request: Request<ListSubscriptionsRequest>,
     ) -> Result<Response<ListSubscriptionsResponse>, Status> {
-        println!("Proxied call to list_subscriptions");
+        tracing::info!("Proxied call to list_subscriptions");
         let transformed = self
             .interceptor
             .transform_list_subscriptions(request.into_inner());
@@ -244,7 +244,7 @@ impl<T: interceptors::ProxyInterceptor + Clone> Subscriber for PubSubProxy<T> {
         &self,
         request: Request<DeleteSubscriptionRequest>,
     ) -> Result<Response<()>, Status> {
-        println!("Proxied call to delete_subscription");
+        tracing::info!("Proxied call to delete_subscription");
         let transformed = self
             .interceptor
             .transform_delete_subscription(request.into_inner());
@@ -258,7 +258,7 @@ impl<T: interceptors::ProxyInterceptor + Clone> Subscriber for PubSubProxy<T> {
         &self,
         request: Request<ModifyAckDeadlineRequest>,
     ) -> Result<Response<()>, Status> {
-        println!("Proxied call to modify_ack_deadline");
+        tracing::info!("Proxied call to modify_ack_deadline");
         let transformed = self
             .interceptor
             .transform_modify_ack_deadline(request.into_inner());
@@ -272,7 +272,7 @@ impl<T: interceptors::ProxyInterceptor + Clone> Subscriber for PubSubProxy<T> {
         &self,
         request: Request<AcknowledgeRequest>,
     ) -> Result<Response<()>, Status> {
-        println!("Proxied call to acknowledge");
+        tracing::info!("Proxied call to acknowledge");
         let transformed = self.interceptor.transform_acknowledge(request.into_inner());
         self.subscriber_client
             .clone()
@@ -281,7 +281,7 @@ impl<T: interceptors::ProxyInterceptor + Clone> Subscriber for PubSubProxy<T> {
     }
 
     async fn pull(&self, request: Request<PullRequest>) -> Result<Response<PullResponse>, Status> {
-        println!("Proxied call to pull");
+        tracing::info!("Proxied call to pull");
         let transformed = self.interceptor.transform_pull(request.into_inner());
         self.subscriber_client.clone().pull(transformed).await
     }
@@ -312,7 +312,7 @@ impl<T: interceptors::ProxyInterceptor + Clone> Subscriber for PubSubProxy<T> {
         &self,
         request: Request<ModifyPushConfigRequest>,
     ) -> Result<Response<()>, Status> {
-        println!("Proxied call to modify_push_config");
+        tracing::info!("Proxied call to modify_push_config");
         let transformed = self
             .interceptor
             .transform_modify_push_config(request.into_inner());
@@ -326,7 +326,7 @@ impl<T: interceptors::ProxyInterceptor + Clone> Subscriber for PubSubProxy<T> {
         &self,
         request: Request<GetSnapshotRequest>,
     ) -> Result<Response<Snapshot>, Status> {
-        println!("Proxied call to get_snapshot");
+        tracing::info!("Proxied call to get_snapshot");
         let transformed = self
             .interceptor
             .transform_get_snapshot(request.into_inner());
@@ -340,7 +340,7 @@ impl<T: interceptors::ProxyInterceptor + Clone> Subscriber for PubSubProxy<T> {
         &self,
         request: Request<ListSnapshotsRequest>,
     ) -> Result<Response<ListSnapshotsResponse>, Status> {
-        println!("Proxied call to list_snapshots");
+        tracing::info!("Proxied call to list_snapshots");
         let transformed = self
             .interceptor
             .transform_list_snapshots(request.into_inner());
@@ -354,7 +354,7 @@ impl<T: interceptors::ProxyInterceptor + Clone> Subscriber for PubSubProxy<T> {
         &self,
         request: Request<CreateSnapshotRequest>,
     ) -> Result<Response<Snapshot>, Status> {
-        println!("Proxied call to create_snapshot");
+        tracing::info!("Proxied call to create_snapshot");
         let transformed = self
             .interceptor
             .transform_create_snapshot(request.into_inner());
@@ -368,7 +368,7 @@ impl<T: interceptors::ProxyInterceptor + Clone> Subscriber for PubSubProxy<T> {
         &self,
         request: Request<UpdateSnapshotRequest>,
     ) -> Result<Response<Snapshot>, Status> {
-        println!("Proxied call to update_snapshot");
+        tracing::info!("Proxied call to update_snapshot");
         let transformed = self
             .interceptor
             .transform_update_snapshot(request.into_inner());
@@ -382,7 +382,7 @@ impl<T: interceptors::ProxyInterceptor + Clone> Subscriber for PubSubProxy<T> {
         &self,
         request: Request<DeleteSnapshotRequest>,
     ) -> Result<Response<()>, Status> {
-        println!("Proxied call to delete_snapshot");
+        tracing::info!("Proxied call to delete_snapshot");
         let transformed = self
             .interceptor
             .transform_delete_snapshot(request.into_inner());
@@ -393,7 +393,7 @@ impl<T: interceptors::ProxyInterceptor + Clone> Subscriber for PubSubProxy<T> {
     }
 
     async fn seek(&self, request: Request<SeekRequest>) -> Result<Response<SeekResponse>, Status> {
-        println!("Proxied call to seek");
+        tracing::info!("Proxied call to seek");
         let transformed = self.interceptor.transform_seek(request.into_inner());
         self.subscriber_client.clone().seek(transformed).await
     }
@@ -415,7 +415,7 @@ pub async fn run_server<T: interceptors::ProxyInterceptor + Clone>(
         .set_serving::<SubscriberServer<PubSubProxy<T>>>()
         .await;
 
-    println!("PubSub proxy server listening on {}", addr);
+    tracing::info!("PubSub proxy server listening on {}", addr);
 
     let res = tonic::transport::Server::builder()
         // Enable HTTP/1.1 support for local health check using curl
@@ -442,6 +442,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_pubsub_proxy() {
+        std::env::set_var("RUST_LOG", "pubsub_grpc_proxy=debug,info");
+        tracing_subscriber::fmt::init();
+
         let project_id =
             std::env::var("GCP_PROJECT_ID").expect("Assuming GCP_PROJECT_ID variable is present");
 

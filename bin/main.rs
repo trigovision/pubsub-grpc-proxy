@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{fmt::Debug, sync::Arc};
 
 use clap::Parser;
 use pubsub_grpc_proxy::{
@@ -26,7 +26,7 @@ struct Args {
 fn create_interceptor(
     interceptor: &str,
     interceptor_arg: Option<String>,
-) -> impl ProxyInterceptor + Clone {
+) -> impl ProxyInterceptor + Clone + Debug {
     match interceptor {
         "passthrough" => Arc::new(PassthroughInterceptor::default()) as Arc<dyn ProxyInterceptor>,
         "namespace" => Arc::new(NamespaceInterceptor::new(
@@ -38,12 +38,16 @@ fn create_interceptor(
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    tracing_subscriber::fmt::init();
+
     let args = Args::parse();
 
-    println!("Running with args: {:#?}", &args);
+    tracing::info!("Running with args: {:#?}", &args);
 
     // Create interceptor based on argument
     let interceptor = create_interceptor(&args.interceptor, args.interceptor_arg.clone());
+
+    tracing::info!("Running with Interceptor: {:?}", &interceptor);
 
     // Create the proxy pointing to the actual PubSub service
     let proxy = PubSubProxy::new(

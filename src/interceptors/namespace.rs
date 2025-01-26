@@ -1,6 +1,6 @@
 use super::ProxyInterceptor;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct NamespaceInterceptor {
     pub prefix: String,
 }
@@ -31,7 +31,7 @@ impl NamespaceInterceptor {
 
         let new_name = format!("projects/{}/{}/{}", project, resource_type, resource_name);
 
-        println!("{} -> {}", &name, &new_name);
+        tracing::info!("{} -> {}", &name, &new_name);
 
         new_name
     }
