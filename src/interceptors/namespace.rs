@@ -29,7 +29,11 @@ impl NamespaceInterceptor {
             format!("{}{}", prefix, resource_name)
         };
 
-        format!("projects/{}/{}/{}", project, resource_type, resource_name)
+        let new_name = format!("projects/{}/{}/{}", project, resource_type, resource_name);
+
+        println!("{} -> {}", &name, &new_name);
+
+        new_name
     }
 }
 
