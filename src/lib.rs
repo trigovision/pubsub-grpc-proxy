@@ -440,13 +440,14 @@ mod tests {
     use super::*;
     use std::time::Duration;
 
-    static PROJECT_ID: &str = "dev-gzahavy";
-
     #[tokio::test]
     async fn test_pubsub_proxy() {
+        let project_id =
+            std::env::var("GCP_PROJECT_ID").expect("Assuming GCP_PROJECT_ID variable is present");
+
         // Start the proxy server
         let proxy = PubSubProxy::new(
-            super::auth::AuthMethod::ApplicationDefaultCredentials(PROJECT_ID.to_string()),
+            super::auth::AuthMethod::ApplicationDefaultCredentials(project_id.clone()),
             PassthroughInterceptor::default(),
         )
         .await
@@ -477,7 +478,7 @@ mod tests {
         let mut subscriber = subscriber_client::SubscriberClient::new(channel);
 
         // Create a topic
-        let topic_path = format!("projects/{}/topics/test-topic-2", PROJECT_ID);
+        let topic_path = format!("projects/{}/topics/test-topic-2", &project_id);
         let topic = Topic {
             name: topic_path.clone(),
             labels: Default::default(),
@@ -497,7 +498,7 @@ mod tests {
         let topic_name = topic.name.clone();
 
         // Create a subscription
-        let sub_path = format!("projects/{}/subscriptions/test-sub-2", PROJECT_ID);
+        let sub_path = format!("projects/{}/subscriptions/test-sub-2", &project_id);
         let subscription = Subscription {
             name: sub_path,
             topic: topic_name,

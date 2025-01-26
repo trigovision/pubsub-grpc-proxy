@@ -7,7 +7,7 @@ use pubsub_grpc_proxy::{
     PubSubProxy,
 };
 
-#[derive(Parser)]
+#[derive(Parser, Debug)]
 #[command(author, version, about)]
 struct Args {
     #[arg(long, required = true)]
@@ -39,6 +39,8 @@ fn create_interceptor(
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
+
+    println!("Running with args: {:#?}", &args);
 
     // Create interceptor based on argument
     let interceptor = create_interceptor(&args.interceptor, args.interceptor_arg.clone());
