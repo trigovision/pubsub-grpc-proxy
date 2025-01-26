@@ -592,6 +592,15 @@ pub async fn run_server<T: interceptors::ProxyInterceptor + Clone>(
     let res = tonic::transport::Server::builder()
         // Enable HTTP/1.1 support for local health check using curl
         .accept_http1(true)
+        .trace_fn(|req| {
+            let uri = req
+                .uri()
+                .path_and_query()
+                .map(|p| p.to_string())
+                .unwrap_or_default();
+
+            tracing::info_span!("", uri)
+        })
         .add_service(publisher.accept_compressed(CompressionEncoding::Gzip))
         .add_service(subscriber.accept_compressed(CompressionEncoding::Gzip))
         .add_service(health_service)

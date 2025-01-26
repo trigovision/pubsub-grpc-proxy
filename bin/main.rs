@@ -26,12 +26,12 @@ struct Args {
 fn create_interceptor(
     interceptor: &str,
     interceptor_arg: Option<String>,
-) -> impl ProxyInterceptor + Clone + Debug {
+) -> Arc<dyn ProxyInterceptor> {
     match interceptor {
-        "passthrough" => Arc::new(PassthroughInterceptor::default()) as Arc<dyn ProxyInterceptor>,
+        "passthrough" => Arc::new(PassthroughInterceptor::default()),
         "namespace" => Arc::new(NamespaceInterceptor::new(
             interceptor_arg.expect("Namespace interceptor requires an argument"),
-        )) as Arc<dyn ProxyInterceptor>,
+        )),
         _ => panic!("Unknown interceptor type"),
     }
 }
