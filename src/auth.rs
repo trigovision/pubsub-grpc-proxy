@@ -39,11 +39,12 @@ impl TokenInterceptor {
         let token = gouth::Builder::new().file(key_path.as_ref()).build()?;
 
         Ok(Self {
-            project_id: project_id.to_string(),
+            project_id: project_id.to_owned(),
             token: Arc::new(token),
         })
     }
 
+    #[allow(dead_code)]
     pub fn project_id(&self) -> &str {
         &self.project_id
     }

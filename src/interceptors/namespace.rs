@@ -251,4 +251,22 @@ impl ProxyInterceptor for NamespaceInterceptor {
             ..request
         }
     }
+
+    fn transform_list_topics(&self, request: super::ListTopicsRequest) -> super::ListTopicsRequest {
+        request
+    }
+
+    fn transform_list_subscriptions(
+        &self,
+        request: super::ListSubscriptionsRequest,
+    ) -> super::ListSubscriptionsRequest {
+        request
+    }
+
+    fn transform_list_snapshots(
+        &self,
+        request: super::ListSnapshotsRequest,
+    ) -> super::ListSnapshotsRequest {
+        request
+    }
 }

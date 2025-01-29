@@ -1,9 +1,9 @@
-use std::{fmt::Debug, sync::Arc};
+use std::fmt::Debug;
 
 use clap::Parser;
 use pubsub_grpc_proxy::{
     auth,
-    interceptors::{namespace::NamespaceInterceptor, PassthroughInterceptor, ProxyInterceptor},
+    interceptors::{NamespaceInterceptor, PassthroughInterceptor, ProxyInterceptorVariant},
     PubSubProxy,
 };
 
@@ -26,10 +26,10 @@ struct Args {
 fn create_interceptor(
     interceptor: &str,
     interceptor_arg: Option<String>,
-) -> Arc<dyn ProxyInterceptor> {
+) -> ProxyInterceptorVariant {
     match interceptor {
-        "passthrough" => Arc::new(PassthroughInterceptor::default()),
-        "namespace" => Arc::new(NamespaceInterceptor::new(
+        "passthrough" => ProxyInterceptorVariant::Passthrough(PassthroughInterceptor::default()),
+        "namespace" => ProxyInterceptorVariant::Namespace(NamespaceInterceptor::new(
             interceptor_arg.expect("Namespace interceptor requires an argument"),
         )),
         _ => panic!("Unknown interceptor type"),
