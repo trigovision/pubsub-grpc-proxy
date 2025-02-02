@@ -14,7 +14,10 @@ impl NamespaceInterceptor {
     fn transform_full_name(&self, name: String) -> String {
         let tokens = name.split('/').collect::<Vec<&str>>();
         if tokens.len() != 4 {
-            panic!("Name must have the format 'projects/$project/$resource_type/$name'");
+            panic!(
+                "Name must have the format 'projects/$project/$resource_type/$name': {}",
+                &name
+            );
         }
 
         let project = tokens[1];
