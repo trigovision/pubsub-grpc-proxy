@@ -76,11 +76,3 @@ impl ProxyInterceptorVariant {
         }
     }
 }
-
-// impl<T: ProxyInterceptor + ?Sized> ProxyInterceptor for Box<T> {
-//     // No need to implement any methods - they'll automatically delegate to the inner type
-// }
-
-// impl<T: ProxyInterceptor + ?Sized> ProxyInterceptor for Arc<T> {
-//     // No need to implement any methods - they'll automatically delegate to the inner type
-// }

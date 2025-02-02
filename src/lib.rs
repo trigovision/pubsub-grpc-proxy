@@ -128,7 +128,22 @@ impl Publisher for PubSubProxy {
             .interceptor
             .as_dyn()
             .transform_publish(request.into_inner());
-        tracing::debug!("Transformed request: {:?}", transformed);
+
+        // Log the transformed request, without the `data` field to avoid printing binaries
+        tracing::debug!(
+            "Transformed request: {:?}",
+            PublishRequest {
+                messages: transformed
+                    .messages
+                    .iter()
+                    .map(|msg| PubsubMessage {
+                        data: vec![],
+                        ..msg.clone()
+                    })
+                    .collect(),
+                ..transformed.clone()
+            }
+        );
 
         let response = self.publisher_client.clone().publish(transformed).await;
         tracing::debug!("Received response: {:?}", response);
@@ -427,7 +442,27 @@ impl Subscriber for PubSubProxy {
         tracing::debug!("Transformed request: {:?}", transformed);
 
         let response = self.subscriber_client.clone().pull(transformed).await;
-        tracing::debug!("Received response: {:?}", response);
+
+        // Log the response, without the `data` field to avoid printing binaries
+        let resp_cleaned = response
+            .as_ref()
+            .map(|resp| resp.get_ref())
+            .map(|resp| PullResponse {
+                received_messages: resp
+                    .received_messages
+                    .iter()
+                    .cloned()
+                    .map(|msg| ReceivedMessage {
+                        message: msg.message.map(|inner_msg| PubsubMessage {
+                            data: vec![],
+                            ..inner_msg
+                        }),
+                        ..msg
+                    })
+                    .collect(),
+            });
+
+        tracing::debug!("Received response: {:?}", resp_cleaned);
 
         response
     }
