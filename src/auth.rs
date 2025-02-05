@@ -10,15 +10,13 @@ pub enum AuthMethod {
 }
 
 #[derive(Clone)]
-pub(crate) struct TokenInterceptor {
+pub struct TokenInterceptor {
     project_id: String,
     token: Arc<gouth::Token>,
 }
 
 impl TokenInterceptor {
-    pub fn with_application_default_credentials(
-        project_id: &str,
-    ) -> Result<Self, Box<dyn std::error::Error>> {
+    pub fn with_application_default_credentials(project_id: &str) -> Result<Self, gouth::Error> {
         let token = gouth::Builder::new()
             .scopes(&[
                 "https://www.googleapis.com/auth/cloud-platform",
@@ -35,7 +33,7 @@ impl TokenInterceptor {
     pub fn with_service_account_key<P: AsRef<Path>>(
         project_id: &str,
         key_path: P,
-    ) -> Result<Self, Box<dyn std::error::Error>> {
+    ) -> Result<Self, gouth::Error> {
         let token = gouth::Builder::new().file(key_path.as_ref()).build()?;
 
         Ok(Self {
@@ -51,7 +49,7 @@ impl TokenInterceptor {
 }
 
 impl TryFrom<AuthMethod> for TokenInterceptor {
-    type Error = Box<dyn std::error::Error>;
+    type Error = gouth::Error;
 
     fn try_from(auth_method: AuthMethod) -> Result<Self, Self::Error> {
         match auth_method {

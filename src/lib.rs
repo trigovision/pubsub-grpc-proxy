@@ -2,71 +2,89 @@ pub mod auth;
 pub mod interceptors;
 pub mod proto;
 
-use auth::TokenInterceptor;
-use futures::{Stream, StreamExt, TryStreamExt};
-use proto::pubsub::publisher_server::{Publisher, PublisherServer};
-use proto::pubsub::subscriber_server::{Subscriber, SubscriberServer};
-use proto::pubsub::*;
+mod cleanup;
+mod tests;
+
 use std::pin::Pin;
 use std::time::Duration;
+
+use futures::{FutureExt, Stream, StreamExt, TryStreamExt};
+use tokio::net::TcpListener;
 use tonic::codec::CompressionEncoding;
 use tonic::service::interceptor::InterceptedService;
+use tonic::transport::server::TcpIncoming;
 use tonic::transport::Channel;
 use tonic::{Request, Response, Status, Streaming};
 
+use auth::TokenInterceptor;
+use cleanup::PubsubCleanup;
+use proto::pubsub::publisher_server::{Publisher, PublisherServer};
+use proto::pubsub::subscriber_server::{Subscriber, SubscriberServer};
+use proto::pubsub::*;
+
 pub const CERTIFICATES: &[u8] = include_bytes!("../google-roots.pem");
+
+pub type AuthenticatedPublisher =
+    publisher_client::PublisherClient<InterceptedService<Channel, TokenInterceptor>>;
+
+pub type AuthenticatedSubscriber =
+    subscriber_client::SubscriberClient<InterceptedService<Channel, TokenInterceptor>>;
+
+#[derive(Debug)]
+pub enum PubSubProxyError {
+    TransportError(tonic::transport::Error),
+    AuthError(gouth::Error),
+}
 
 #[derive(Clone)]
 pub struct PubSubProxy {
-    publisher_client:
-        publisher_client::PublisherClient<InterceptedService<Channel, TokenInterceptor>>,
-    subscriber_client:
-        subscriber_client::SubscriberClient<InterceptedService<Channel, TokenInterceptor>>,
+    publisher_client: AuthenticatedPublisher,
+    subscriber_client: AuthenticatedSubscriber,
     interceptor: interceptors::ProxyInterceptorVariant,
+
+    cleanup_requested: bool,
+    cleanup_tool: PubsubCleanup,
 }
 
 impl PubSubProxy {
     pub async fn new(
         auth_method: auth::AuthMethod,
         interceptor: interceptors::ProxyInterceptorVariant,
-    ) -> Result<Self, Box<dyn std::error::Error>> {
-        tracing::debug!("Creating TLS config...");
-        let tls_config = tonic::transport::ClientTlsConfig::new()
-            .ca_certificate(tonic::transport::Certificate::from_pem(CERTIFICATES))
-            .domain_name("pubsub.googleapis.com");
+        cleanup_on_shutdown: bool,
+    ) -> Result<Self, PubSubProxyError> {
+        let (publisher_client, subscriber_client) =
+            connect_upstream_pubsub_googleapis(auth_method).await?;
 
-        tracing::info!("Establishing channel connection to pubsub.googleapis.com...");
-        let channel = tonic::transport::Channel::from_static("https://pubsub.googleapis.com/")
-            .connect_timeout(Duration::from_secs(30))
-            .http2_keep_alive_interval(Duration::from_secs(30))
-            .keep_alive_timeout(Duration::from_secs(20))
-            .keep_alive_while_idle(true)
-            .tls_config(tls_config)
-            .expect("static address");
-
-        tracing::info!("Awaiting channel connection...");
-        let connected_channel = channel.connect().await?;
-        tracing::info!("Channel connected successfully");
-
-        let token_interceptor: TokenInterceptor = auth_method.try_into()?;
+        let cleanup_tool = PubsubCleanup::new(publisher_client.clone(), subscriber_client.clone());
 
         Ok(Self {
-            publisher_client: publisher_client::PublisherClient::with_interceptor(
-                connected_channel.clone(),
-                token_interceptor.clone(),
-            ),
-            subscriber_client: subscriber_client::SubscriberClient::with_interceptor(
-                connected_channel,
-                token_interceptor.clone(),
-            ),
+            publisher_client,
+            subscriber_client,
             interceptor,
+            cleanup_requested: cleanup_on_shutdown,
+            cleanup_tool,
         })
     }
 
-    pub fn into_service(self) -> (PublisherServer<Self>, SubscriberServer<Self>) {
+    pub async fn cleanup_all_topics_and_subscriptions_if_needed(&mut self) {
+        if !self.cleanup_requested {
+            return;
+        }
+
+        let max_parallel: usize = std::env::var("DELETE_MAX_PARALLEL")
+            .unwrap_or_default()
+            .parse()
+            .unwrap_or(16);
+
+        self.cleanup_tool
+            .cleanup_all_topics_and_subscriptions(max_parallel)
+            .await
+    }
+
+    pub fn build_service(&self) -> (PublisherServer<Self>, SubscriberServer<Self>) {
         (
             PublisherServer::new(self.clone()),
-            SubscriberServer::new(self),
+            SubscriberServer::new(self.clone()),
         )
     }
 }
@@ -82,6 +100,8 @@ impl Publisher for PubSubProxy {
             .transform_create_topic(request.into_inner());
 
         tracing::debug!("Transformed request: {:?}", transformed);
+
+        self.cleanup_tool.record_topic(transformed.name.clone());
 
         let response = self
             .publisher_client
@@ -289,6 +309,9 @@ impl Subscriber for PubSubProxy {
             .as_dyn()
             .transform_create_subscription(request.into_inner());
         tracing::debug!("Transformed request: {:?}", transformed);
+
+        self.cleanup_tool
+            .record_subscription(transformed.name.clone());
 
         let response = self
             .subscriber_client
@@ -642,12 +665,83 @@ impl Subscriber for PubSubProxy {
     }
 }
 
+async fn connect_upstream_pubsub_googleapis(
+    auth_method: auth::AuthMethod,
+) -> Result<(AuthenticatedPublisher, AuthenticatedSubscriber), PubSubProxyError> {
+    tracing::debug!("Creating TLS config...");
+    let tls_config = tonic::transport::ClientTlsConfig::new()
+        .ca_certificate(tonic::transport::Certificate::from_pem(CERTIFICATES))
+        .domain_name("pubsub.googleapis.com");
+
+    tracing::info!("Establishing channel connection to pubsub.googleapis.com...");
+    let channel = tonic::transport::Channel::from_static("https://pubsub.googleapis.com/")
+        .connect_timeout(Duration::from_secs(30))
+        .http2_keep_alive_interval(Duration::from_secs(30))
+        .keep_alive_timeout(Duration::from_secs(20))
+        .keep_alive_while_idle(true)
+        .tls_config(tls_config)
+        .expect("static address");
+
+    tracing::info!("Awaiting channel connection...");
+    let connected_channel = channel
+        .connect()
+        .await
+        .map_err(|err| PubSubProxyError::TransportError(err))?;
+
+    tracing::info!("Channel connected successfully");
+
+    let token_interceptor: TokenInterceptor = auth_method
+        .try_into()
+        .map_err(|err| PubSubProxyError::AuthError(err))?;
+
+    let publisher_client = publisher_client::PublisherClient::with_interceptor(
+        connected_channel.clone(),
+        token_interceptor.clone(),
+    );
+
+    let subscriber_client = subscriber_client::SubscriberClient::with_interceptor(
+        connected_channel,
+        token_interceptor.clone(),
+    );
+
+    Ok((publisher_client, subscriber_client))
+}
+
+pub struct RunningProxyHandle {
+    shutdown_signal: tokio::sync::mpsc::Sender<()>,
+    server_task: tokio::task::JoinHandle<Result<(), tonic::transport::Error>>,
+}
+
+impl RunningProxyHandle {
+    pub async fn wait_for_completion(self) -> Result<(), PubSubProxyError> {
+        tracing::debug!("Waiting for server shutdown");
+        let task_result = self.server_task.await;
+
+        tracing::info!("Server shutdown confirmed");
+
+        task_result
+            .expect("Task Join should work")
+            .map_err(|err| PubSubProxyError::TransportError(err))
+    }
+
+    pub async fn shutdown(self) -> Result<(), PubSubProxyError> {
+        tracing::debug!("Sending shutdown signal");
+        let _ = self.shutdown_signal.send(()).await;
+
+        tracing::debug!("Waiting for server shutdown");
+        self.wait_for_completion().await
+    }
+}
+
 pub async fn run_server(
-    proxy: PubSubProxy,
-    bind_addr: &str,
-) -> Result<(), Box<dyn std::error::Error>> {
-    let addr = bind_addr.parse()?;
-    let (publisher, subscriber) = proxy.into_service();
+    mut proxy: PubSubProxy,
+    tcp_listener: TcpListener,
+    shutdown_signal: (
+        tokio::sync::mpsc::Sender<()>,
+        tokio::sync::mpsc::Receiver<()>,
+    ),
+) -> RunningProxyHandle {
+    let (publisher, subscriber) = proxy.build_service();
 
     let (mut health_reporter, health_service) = tonic_health::server::health_reporter();
     health_reporter
@@ -658,9 +752,16 @@ pub async fn run_server(
         .set_serving::<SubscriberServer<PubSubProxy>>()
         .await;
 
-    tracing::info!("PubSub proxy server listening on {}", addr);
+    tracing::info!(
+        "PubSub proxy server listening on {}",
+        tcp_listener.local_addr().unwrap()
+    );
 
-    let res = tonic::transport::Server::builder()
+    let tcp_incoming =
+        TcpIncoming::from_listener(tcp_listener, false, Some(Duration::from_secs(15)))
+            .expect("TcpIncoming from TcpListener");
+
+    let builder = tonic::transport::Server::builder()
         // Enable HTTP/1.1 support for local health check using curl
         .accept_http1(true)
         .trace_fn(|req| {
@@ -674,165 +775,30 @@ pub async fn run_server(
         })
         .add_service(publisher.accept_compressed(CompressionEncoding::Gzip))
         .add_service(subscriber.accept_compressed(CompressionEncoding::Gzip))
-        .add_service(health_service)
-        .serve(addr)
-        .await;
+        .add_service(health_service);
 
-    if let Err(e) = res {
-        panic!("Server error: {}", e);
+    let mut inner_shutdown_signal = shutdown_signal.1;
+    let task = tokio::spawn(async move {
+        let serve_result = builder
+            .serve_with_incoming_shutdown(tcp_incoming, inner_shutdown_signal.recv().map(|_| ()))
+            .await;
+
+        proxy.cleanup_all_topics_and_subscriptions_if_needed().await;
+
+        serve_result
+    });
+
+    RunningProxyHandle {
+        shutdown_signal: shutdown_signal.0,
+        server_task: task,
     }
-
-    Ok(())
 }
 
-#[cfg(test)]
-mod tests {
-    use interceptors::{PassthroughInterceptor, ProxyInterceptorVariant};
-
-    use super::*;
-    use std::time::Duration;
-
-    #[tokio::test]
-    async fn test_pubsub_proxy() {
-        std::env::set_var("RUST_LOG", "pubsub_grpc_proxy=debug,info");
-        tracing_subscriber::fmt::init();
-
-        let project_id =
-            std::env::var("GCP_PROJECT_ID").expect("Assuming GCP_PROJECT_ID variable is present");
-
-        // Start the proxy server
-        let proxy = PubSubProxy::new(
-            super::auth::AuthMethod::ApplicationDefaultCredentials(project_id.clone()),
-            ProxyInterceptorVariant::Passthrough(PassthroughInterceptor::default()),
-        )
-        .await
-        .unwrap();
-
-        let proxy_addr = "0.0.0.0:1234";
-        let server = run_server(proxy, proxy_addr);
-        let _server_handle = tokio::spawn(async move {
-            match server.await {
-                Ok(_) => (),
-                Err(e) => {
-                    panic!("Server error: {}", e);
-                }
-            }
-        });
-
-        // Give the server a moment to start
-        tokio::time::sleep(Duration::from_secs(1)).await;
-
-        // Initialize client pointing to our proxy
-        let channel = tonic::transport::Channel::from_shared(format!("http://{}", proxy_addr))
-            .unwrap()
-            .connect()
-            .await
-            .unwrap();
-
-        let mut publisher = publisher_client::PublisherClient::new(channel.clone());
-        let mut subscriber = subscriber_client::SubscriberClient::new(channel);
-
-        // Create a topic
-        let topic_path = format!("projects/{}/topics/test-topic-2", &project_id);
-        let topic = Topic {
-            name: topic_path.clone(),
-            labels: Default::default(),
-            message_storage_policy: None,
-            kms_key_name: "".to_string(),
-            schema_settings: None,
-            satisfies_pzs: false,
-            message_retention_duration: None,
-            ingestion_data_source_settings: None,
-            state: i32::default(),
-        };
-        let topic = publisher
-            .create_topic(Request::new(topic))
-            .await
-            .unwrap()
-            .into_inner();
-        let topic_name = topic.name.clone();
-
-        // Create a subscription
-        let sub_path = format!("projects/{}/subscriptions/test-sub-2", &project_id);
-        let subscription = Subscription {
-            name: sub_path,
-            topic: topic_name,
-            push_config: None,
-            ack_deadline_seconds: 10,
-            retain_acked_messages: false,
-            message_retention_duration: None,
-            labels: Default::default(),
-            enable_message_ordering: false,
-            expiration_policy: None,
-            filter: "".to_string(),
-            dead_letter_policy: None,
-            retry_policy: None,
-            detached: false,
-            enable_exactly_once_delivery: false,
-            topic_message_retention_duration: None,
-            state: i32::default(),
-            analytics_hub_subscription_info: None,
-            bigquery_config: None,
-            cloud_storage_config: None,
-        };
-        let subscription = subscriber
-            .create_subscription(Request::new(subscription))
-            .await
-            .unwrap()
-            .into_inner();
-        let subscription_name = subscription.name.clone();
-
-        // Publish a message
-        let publish_request = PublishRequest {
-            topic: topic.name,
-            messages: vec![PubsubMessage {
-                data: b"Hello, world!".to_vec(),
-                attributes: Default::default(),
-                message_id: "".to_string(),
-                publish_time: None,
-                ordering_key: "".to_string(),
-            }],
-        };
-        let publish_response = publisher
-            .publish(Request::new(publish_request))
-            .await
-            .unwrap();
-        println!("Published message ID: {:?}", publish_response);
-
-        // Pull the message
-        let pull_request = PullRequest {
-            subscription: subscription_name.clone(),
-            max_messages: 1,
-            ..Default::default()
-        };
-        let pull_response = subscriber
-            .pull(Request::new(pull_request))
-            .await
-            .unwrap()
-            .into_inner();
-
-        assert_eq!(pull_response.received_messages.len(), 1);
-        assert_eq!(
-            pull_response.received_messages[0]
-                .message
-                .as_ref()
-                .unwrap()
-                .data,
-            b"Hello, world!"
-        );
-
-        // Acknowledge the message
-        let ack_request = AcknowledgeRequest {
-            subscription: subscription_name,
-            ack_ids: pull_response
-                .received_messages
-                .iter()
-                .map(|msg| msg.ack_id.clone())
-                .collect(),
-        };
-        subscriber
-            .acknowledge(Request::new(ack_request))
-            .await
-            .unwrap();
+impl Into<anyhow::Error> for PubSubProxyError {
+    fn into(self) -> anyhow::Error {
+        match self {
+            PubSubProxyError::TransportError(error) => anyhow::anyhow!(error),
+            PubSubProxyError::AuthError(error) => anyhow::anyhow!(error),
+        }
     }
 }
