@@ -3,6 +3,7 @@ use std::fmt::Debug;
 use anyhow::Context;
 use clap::Parser;
 
+use futures::FutureExt;
 use pubsub_grpc_proxy::{
     auth,
     interceptors::{NamespaceInterceptor, PassthroughInterceptor, ProxyInterceptorVariant},
@@ -73,17 +74,11 @@ async fn main() -> anyhow::Result<()> {
         .await
         .context(format!("Failed to bind to port: {}", args.port))?;
 
-    // Listen for ctrl-c to gracefully terminate the server
-    // Used to support cleanup of topics/subscriptions
-    let ctrlc_signal = tokio::signal::ctrl_c();
     let (shutdown_send, shutdown_recv) = tokio::sync::mpsc::channel::<()>(1);
 
-    // Convert ctrl-c signal into a oneshot signal
-    let shutdown_sender_clone = shutdown_send.clone();
-    tokio::spawn(async move {
-        let _ = ctrlc_signal.await;
-        let _ = shutdown_sender_clone.send(()).await;
-    });
+    register_shudown_handlers(shutdown_send.clone())
+        .await
+        .context("Failed to register shutdown signal handlers")?;
 
     let server_handle =
         pubsub_grpc_proxy::run_server(proxy, listener, (shutdown_send, shutdown_recv)).await;
@@ -92,4 +87,34 @@ async fn main() -> anyhow::Result<()> {
         .wait_for_completion()
         .await
         .map_err(|err| err.into())
+}
+
+async fn register_shudown_handlers(
+    shutdown_sender: tokio::sync::mpsc::Sender<()>,
+) -> anyhow::Result<()> {
+    // Listen for ctrl-c/sigterm to gracefully terminate the server
+    // Used to support cleanup of topics/subscriptions
+    let mut sigterm_signal =
+        tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+            .context("Failed to register SIGTERM handler")?;
+
+    let mut sigint_signal =
+        tokio::signal::unix::signal(tokio::signal::unix::SignalKind::interrupt())
+            .context("Failed to register SIGINT handler")?;
+
+    // Convert kill (SIGTERM) signal into a oneshot signal
+    let shutdown_sender_clone = shutdown_sender.clone();
+    tokio::spawn(async move {
+        let _ = sigterm_signal.recv().await;
+        let _ = shutdown_sender_clone.send(()).await;
+    });
+
+    // Convert ctrl-c (SIGINT) signal into a oneshot signal
+    let shutdown_sender_clone = shutdown_sender.clone();
+    tokio::spawn(async move {
+        let _ = sigint_signal.recv().await;
+        let _ = shutdown_sender_clone.send(()).await;
+    });
+
+    Ok(())
 }
