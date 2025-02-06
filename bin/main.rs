@@ -82,7 +82,7 @@ async fn main() -> anyhow::Result<()> {
     let shutdown_sender_clone = shutdown_send.clone();
     tokio::spawn(async move {
         let _ = ctrlc_signal.await;
-        let _ = shutdown_sender_clone.send(());
+        let _ = shutdown_sender_clone.send(()).await;
     });
 
     let server_handle =
