@@ -180,6 +180,10 @@ impl ProxyInterceptor for NamespaceInterceptor {
         super::Subscription {
             name: self.transform_full_name(request.name),
             topic: self.transform_full_name(request.topic),
+            dead_letter_policy: request.dead_letter_policy.map(|p| super::DeadLetterPolicy {
+                dead_letter_topic: self.transform_full_name(p.dead_letter_topic),
+                ..p
+            }),
             ..request
         }
     }
@@ -189,11 +193,9 @@ impl ProxyInterceptor for NamespaceInterceptor {
         request: super::UpdateSubscriptionRequest,
     ) -> super::UpdateSubscriptionRequest {
         super::UpdateSubscriptionRequest {
-            subscription: request.subscription.map(|s| super::Subscription {
-                name: self.transform_full_name(s.name),
-                topic: self.transform_full_name(s.topic),
-                ..s
-            }),
+            subscription: request
+                .subscription
+                .map(|s| self.transform_create_subscription(s)),
             ..request
         }
     }
